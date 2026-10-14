@@ -11274,9 +11274,9 @@ function renderModal() {
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 rounded-xl shadow-2xs transition hover:scale-102 active:scale-98 group"
-                  title="前往衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」檢驗報告詳細頁面"
+                  title="前往衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」食品營養成分資料庫頁面"
                 >
-                  <span>🏛️ 衛福部檢驗報告</span>
+                  <span>🏛️ FDA營養成分資料庫</span>
                   <span class="text-3xs text-emerald-600 group-hover:translate-x-0.5 transition-transform font-bold">↗</span>
                 </a>
               </div>
@@ -11361,9 +11361,9 @@ function renderModal() {
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-2xs text-emerald-700 hover:text-emerald-900 hover:underline flex items-center space-x-1 font-medium bg-emerald-50/80 px-2 py-1 rounded-lg border border-emerald-200/60 transition"
-                title="衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」檢驗報告詳細頁面"
+                title="衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」食品營養成分資料庫頁面"
               >
-                <span>🔍 衛福部 TFDA 官方檢驗報告對照 ↗</span>
+                <span>🔍 衛福部 TFDA 營養成分資料庫對照 ↗</span>
               </a>
             </div>
             <div class="overflow-hidden border border-slate-200 rounded-2xl">
