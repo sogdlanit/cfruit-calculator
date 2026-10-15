@@ -7083,6 +7083,12 @@ function getCostDatabasePageHtml() {
 
   return `
     <div class="space-y-6">
+      <!-- 頂部：當前拼盤搭配原料成本與商業盒裝利潤核算模組 -->
+      <div id="cost-live-calculator-section" class="scroll-mt-24">
+        <div id="cost-live-calculator-container">
+          ${renderCostLiveCalculatorHtml()}
+        </div>
+      </div>
       <!-- 頂部標題與快速統計指標 -->
       <div class="bg-white rounded-3xl p-6 shadow-soft border border-slate-200/60 space-y-5">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -7297,12 +7303,6 @@ function getCostDatabasePageHtml() {
         </div>
       </div>
 
-      <!-- 底部：當前拼盤搭配原料成本與商業盒裝利潤核算模組 -->
-      <div id="cost-live-calculator-section" class="scroll-mt-24">
-        <div id="cost-live-calculator-container">
-          ${renderCostLiveCalculatorHtml()}
-        </div>
-      </div>
     </div>
   `;
 }
