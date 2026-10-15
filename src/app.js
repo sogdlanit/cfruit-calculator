@@ -2438,7 +2438,7 @@ function getFruit(id) {
     const found = window.FRUITS_DATA.find((f) => f.id === id);
     if (found) return found;
   }
-  return (state && state.fruits && state.fruits[0]) || (typeof window !== 'undefined' && window.FRUITS_DATA && window.FRUITS_DATA[0]) || { name: id, emoji: '🍎', nutrition_per_100g: { calories: 0 } };
+  return (state && state.fruits && state.fruits[0]) || (typeof window !== 'undefined' && window.FRUITS_DATA && window.FRUITS_DATA[0]) || { id, name: id, emoji: '🍎', category: '其他', tags: [], nutrition_per_100g: { calories: 0, water: 0, protein: 0, fat: 0, saturated_fat: 0, trans_fat: 0, carbohydrates: 0, sugar: 0, dietary_fiber: 0, vitamin_c: 0, potassium: 0, magnesium: 0, calcium: 0, sodium: 0 } };
 }
 
 // 工具函式：計算單項營養素
@@ -2720,12 +2720,21 @@ function preserveScrollAndFocus(fn) {
 }
 
 function render() {
+  if ((!state.fruits || state.fruits.length === 0) && typeof window !== 'undefined' && Array.isArray(window.FRUITS_DATA)) {
+    state.fruits = window.FRUITS_DATA;
+  }
+  if (!Array.isArray(state.plateItems)) {
+    state.plateItems = [];
+  }
   preserveScrollAndFocus(() => {
     autoSaveCurrentState();
     renderNavbar();
     renderTabContent();
     renderModal();
   });
+}
+if (typeof window !== 'undefined') {
+  window.render = render;
 }
 
 // 導航渲染
@@ -10627,7 +10636,7 @@ function renderCatalogCardsHtml() {
       !term ||
       f.name.toLowerCase().includes(term) ||
       f.english_name.toLowerCase().includes(term) ||
-      f.tags.some((t) => t.toLowerCase().includes(term));
+      (f.tags || []).some((t) => t.toLowerCase().includes(term));
 
     const matchCat = state.selectedCategory === '全部' || f.category === state.selectedCategory;
 
@@ -10637,7 +10646,7 @@ function renderCatalogCardsHtml() {
     } else if (state.selectedTag === '低GI推薦') {
       matchTag = f.gi_level === 'low';
     } else if (state.selectedTag !== '全部') {
-      matchTag = f.tags.some((t) => t.includes(state.selectedTag.replace('推薦', '').replace('首選', '')));
+      matchTag = (f.tags || []).some((t) => t.includes(state.selectedTag.replace('推薦', '').replace('首選', '')));
     }
 
     return matchTerm && matchCat && matchTag;
@@ -11400,7 +11409,7 @@ function renderModal() {
           <div>
             <p class="text-slate-600 text-sm leading-relaxed mb-3">${fruit.description}</p>
             <div class="flex flex-wrap gap-1.5">
-              ${fruit.tags
+              ${(fruit.tags || [])
                 .map((t) => `<span class="px-2.5 py-0.5 text-xs font-medium rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">#${t}</span>`)
                 .join('')}
             </div>
@@ -11850,6 +11859,14 @@ window.switchPlateRightTab = function (tab) {
   state.plateRightTab = tab;
   renderTabContent();
 };
+
+window.switchTab = function (tab) {
+  state.activeTab = tab;
+  render();
+};
+function switchTab(tab) {
+  window.switchTab(tab);
+}
 
 // ==========================================
 // HTML5 拖曳配方與工作台核心事件處理
@@ -12334,9 +12351,15 @@ window.copySummaryText = function () {
 };
 
 // 頁面初次載入
-document.addEventListener('DOMContentLoaded', () => {
-  render();
-});
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      render();
+    });
+  } else {
+    render();
+  }
+}
 
 
 // ==========================================
