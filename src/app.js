@@ -2353,6 +2353,8 @@ const state = {
   labelRecipeZone: 'all',
   recipesModalOpen: false,
   editingRecipeId: null,
+  paletteSearchTerm: '',
+  paletteCategory: '全部',
   searchTerm: '',
   selectedCategory: '全部',
   selectedTag: '全部',
@@ -8407,55 +8409,194 @@ function getPlateHtml() {
   const fiberPct = Math.min(200, Math.round((totals.dietary_fiber / DRI.FRUIT_FIBER_GOAL_G) * 100));
   const sugarPct = Math.min(150, Math.round((totals.sugar / DRI.SUGAR_MAX_G) * 100));
 
+  // 1. 水果庫資料彙整與即時篩選
+  const allPaletteItems = [
+    ...(Array.isArray(state.fruits) && state.fruits.length > 0 ? state.fruits : (typeof window !== 'undefined' && window.FRUITS_DATA ? window.FRUITS_DATA : [])),
+    ...(typeof SUPPLEMENTARY_INGREDIENTS !== 'undefined' ? Object.values(SUPPLEMENTARY_INGREDIENTS) : [])
+  ];
+
+  const pSearch = (state.paletteSearchTerm || '').trim().toLowerCase();
+  const pCat = state.paletteCategory || '全部';
+
+  const filteredPaletteItems = allPaletteItems.filter((f) => {
+    if (!f) return false;
+    if (pCat === '⭐常用') {
+      if (!state.favorites || !state.favorites.includes(f.id)) return false;
+    } else if (pCat !== '全部') {
+      if (pCat === '機能/輔料') {
+        const suppKeys = typeof SUPPLEMENTARY_INGREDIENTS !== 'undefined' ? Object.keys(SUPPLEMENTARY_INGREDIENTS) : [];
+        if (!suppKeys.includes(f.id)) return false;
+      } else if (f.category !== pCat && (!f.category || !f.category.includes(pCat.replace('類', '')))) {
+        return false;
+      }
+    }
+    if (pSearch) {
+      const matchName = f.name && f.name.toLowerCase().includes(pSearch);
+      const matchEn = f.english_name && f.english_name.toLowerCase().includes(pSearch);
+      const matchCat = f.category && f.category.toLowerCase().includes(pSearch);
+      const matchTag = f.tags && f.tags.some(t => t.toLowerCase().includes(pSearch));
+      if (!matchName && !matchEn && !matchCat && !matchTag) return false;
+    }
+    return true;
+  });
+
+  const paletteCategories = ['全部', '⭐常用', '本土瓜果', '漿果與莓果', '柑橘類', '仁果類', '核果與熱帶水果', '機能/輔料'];
+
+  // Left Column (Column 1): 水果與原料庫 Palette (高密度側邊欄)
+  const paletteHtml = `
+    <div class="lg:col-span-3 xl:col-span-3 bg-white rounded-3xl p-3 sm:p-4 shadow-soft border border-slate-200/60 flex flex-col lg:sticky lg:top-20 max-h-[calc(100vh-100px)] no-print">
+      <!-- 標題與水果計數 -->
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold text-slate-800 text-sm flex items-center space-x-1.5">
+          <span>🍉</span>
+          <span>水果與原料庫</span>
+        </h3>
+        <span class="text-3xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold font-mono">
+          ${filteredPaletteItems.length} 種
+        </span>
+      </div>
+
+      <!-- 即時關鍵字搜尋框 -->
+      <div class="relative mb-2">
+        <input
+          id="plate-palette-search"
+          type="text"
+          placeholder="搜尋水果、維C、低GI..."
+          value="${state.paletteSearchTerm || ''}"
+          oninput="handlePaletteSearch(this.value)"
+          class="w-full pl-7 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden transition placeholder:text-slate-400 font-medium"
+        />
+        <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+        ${state.paletteSearchTerm ? `
+          <button onclick="handlePaletteSearch('')" class="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs" title="清除搜尋">✕</button>
+        ` : ''}
+      </div>
+
+      <!-- 分類標籤滑動條 -->
+      <div class="flex items-center space-x-1 overflow-x-auto pb-1.5 mb-2 scrollbar-none text-2xs">
+        ${paletteCategories.map(cat => `
+          <button
+            type="button"
+            onclick="setPaletteCategory('${cat}')"
+            class="px-2 py-0.5 rounded-lg whitespace-nowrap font-medium transition ${
+              pCat === cat
+                ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }"
+          >
+            ${cat}
+          </button>
+        `).join('')}
+      </div>
+
+      <!-- 拖曳提示 -->
+      <div class="text-3xs text-slate-400 mb-2 flex items-center justify-between px-0.5">
+        <span class="flex items-center space-x-1">
+          <span>✋</span>
+          <span>按住拖曳或點 ＋ 加入</span>
+        </span>
+        <span class="text-emerald-600 font-semibold">隨選即時算</span>
+      </div>
+
+      <!-- 可捲動水果原料卡片列表 -->
+      <div class="overflow-y-auto pr-1 space-y-1.5 flex-1 min-h-[260px]">
+        ${filteredPaletteItems.length === 0 ? `
+          <div class="text-center py-10 text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            查無相符的水果或配料
+          </div>
+        ` : filteredPaletteItems.map(f => {
+          const inPlate = state.plateItems.some(it => it.fruitId === f.id);
+          const defaultGrams = f.serving_unit?.grams || 100;
+          return `
+            <div
+              id="palette-item-${f.id}"
+              draggable="true"
+              ondragstart="handleFruitDragStart(event, '${f.id}')"
+              onclick="addToPlate('${f.id}', ${defaultGrams})"
+              class="group flex items-center justify-between p-2 rounded-xl border transition cursor-grab active:cursor-grabbing select-none text-left ${
+                inPlate
+                  ? 'bg-emerald-50/70 border-emerald-300 shadow-2xs'
+                  : 'bg-slate-50/70 border-slate-200/60 hover:bg-emerald-50/40 hover:border-emerald-300'
+              }"
+              title="按住拖曳進中間配方表，或點擊 ＋ 立即加入"
+            >
+              <div class="flex items-center space-x-2 min-w-0">
+                <span class="text-xl shrink-0 group-hover:scale-105 transition-transform">${f.emoji}</span>
+                <div class="truncate">
+                  <div class="font-bold text-xs text-slate-800 group-hover:text-emerald-700 truncate flex items-center space-x-1">
+                    <span>${f.name}</span>
+                    ${inPlate ? '<span class="text-3xs text-emerald-600 font-normal">已在配方</span>' : ''}
+                  </div>
+                  <div class="text-3xs text-slate-400 font-mono">
+                    ${f.nutrition_per_100g.calories} kcal · 糖 ${f.nutrition_per_100g.sugar}g
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onclick="event.stopPropagation(); addToPlate('${f.id}', ${defaultGrams})"
+                class="px-2 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ml-1.5 ${
+                  inPlate
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-white group-hover:bg-emerald-600 group-hover:text-white text-emerald-700 border border-slate-200 group-hover:border-emerald-600 shadow-2xs'
+                }"
+                title="加入 ${f.name} (${defaultGrams}g)"
+              >
+                ＋
+              </button>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  // Middle Column (Column 2): 配方表內容
   let itemsHtml = '';
   if (state.plateItems.length === 0) {
     itemsHtml = `
-      <div class="bg-white rounded-3xl p-8 border border-slate-200/60 shadow-soft text-center space-y-6">
-        <div class="w-16 h-16 mx-auto rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl shadow-inner">
+      <div class="text-center py-12 px-4 space-y-4">
+        <div class="w-16 h-16 mx-auto rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl shadow-inner border border-emerald-100">
           🥗
         </div>
         <div>
-          <h3 class="text-lg font-bold text-slate-800">您的水果搭配目前是空的</h3>
-          <p className="text-sm text-slate-500 max-w-md mx-auto mt-1">
-            您可以從「水果百科圖鑑」挑選水果加入，或點選下方為您精心設計的健康拼盤組合！
+          <h3 class="text-base font-bold text-slate-800">配方目前是空的</h3>
+          <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1">
+            從左側「水果原料庫」拖曳水果至此，或點擊下方推薦經典配方快速試算！
           </p>
         </div>
-        <div class="pt-2 text-left">
-          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3 text-center">
-            推薦健康水果搭配快速試算
+        <div class="pt-2 text-left max-w-md mx-auto">
+          <span class="text-3xs font-bold text-slate-400 uppercase tracking-wider block mb-2.5 text-center">
+            推薦健康水果搭配快速載入
           </span>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button onclick="applyPreset('weight_loss')" class="p-4 rounded-2xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40 text-left transition group">
-              <div class="flex items-center space-x-2 mb-1">
-                <span class="text-xl">🍐</span>
-                <span class="font-bold text-sm text-slate-800 group-hover:text-emerald-700">減脂高纖低糖盤</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="applyPreset('weight_loss')" class="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-left transition group">
+              <div class="flex items-center space-x-1.5 mb-0.5">
+                <span class="text-base">🍐</span>
+                <span class="font-bold text-xs text-slate-800 group-hover:text-emerald-700">減脂高纖低糖盤</span>
               </div>
-              <p class="text-xs text-slate-500">珍珠芭樂 150g + 綠奇異果 85g + 藍莓 50g</p>
-              <div class="text-3xs text-emerald-600 font-semibold mt-2">約 133 kcal · 6.6g 膳食纖維</div>
+              <div class="text-3xs text-emerald-600 font-medium">133 kcal · 6.6g 纖維</div>
             </button>
-            <button onclick="applyPreset('vitamin_c')" class="p-4 rounded-2xl border border-slate-200 hover:border-orange-400 hover:bg-orange-50/40 text-left transition group">
-              <div class="flex items-center space-x-2 mb-1">
-                <span class="text-xl">🥝</span>
-                <span class="font-bold text-sm text-slate-800 group-hover:text-orange-700">美顏高 C 抗氧化盤</span>
+            <button onclick="applyPreset('vitamin_c')" class="p-2.5 rounded-xl border border-slate-200 hover:border-orange-400 hover:bg-orange-50/50 text-left transition group">
+              <div class="flex items-center space-x-1.5 mb-0.5">
+                <span class="text-base">🥝</span>
+                <span class="font-bold text-xs text-slate-800 group-hover:text-orange-700">美顏高 C 抗氧化</span>
               </div>
-              <p class="text-xs text-slate-500">黃金奇異果 90g + 草莓 100g + 紅心芭樂 100g</p>
-              <div class="text-3xs text-orange-600 font-semibold mt-2">約 138 kcal · 428mg 維生素C (超高)</div>
+              <div class="text-3xs text-orange-600 font-medium">138 kcal · 428mg C</div>
             </button>
-            <button onclick="applyPreset('workout')" class="p-4 rounded-2xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/40 text-left transition group">
-              <div class="flex items-center space-x-2 mb-1">
-                <span class="text-xl">🍌</span>
-                <span class="font-bold text-sm text-slate-800 group-hover:text-amber-700">運動補充電解質盤</span>
+            <button onclick="applyPreset('workout')" class="p-2.5 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 text-left transition group">
+              <div class="flex items-center space-x-1.5 mb-0.5">
+                <span class="text-base">🍌</span>
+                <span class="font-bold text-xs text-slate-800 group-hover:text-amber-700">運動補充電解質</span>
               </div>
-              <p class="text-xs text-slate-500">香蕉 120g + 富士蘋果 (帶皮) 100g</p>
-              <div class="text-3xs text-amber-600 font-semibold mt-2">約 158 kcal · 536mg 高鉀補充電解質</div>
+              <div class="text-3xs text-amber-600 font-medium">158 kcal · 高鉀補給</div>
             </button>
-            <button onclick="applyPreset('hydration')" class="p-4 rounded-2xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/40 text-left transition group">
-              <div class="flex items-center space-x-2 mb-1">
-                <span class="text-xl">🍉</span>
-                <span class="font-bold text-sm text-slate-800 group-hover:text-teal-700">清爽水潤消暑盤</span>
+            <button onclick="applyPreset('hydration')" class="p-2.5 rounded-xl border border-slate-200 hover:border-teal-400 hover:bg-teal-50/50 text-left transition group">
+              <div class="flex items-center space-x-1.5 mb-0.5">
+                <span class="text-base">🍉</span>
+                <span class="font-bold text-xs text-slate-800 group-hover:text-teal-700">清爽水潤消暑盤</span>
               </div>
-              <p class="text-xs text-slate-500">黑珍珠蓮霧 110g + 紅肉西瓜 150g</p>
-              <div class="text-3xs text-teal-600 font-semibold mt-2">約 86 kcal · 超低卡水分充足</div>
+              <div class="text-3xs text-teal-600 font-medium">86 kcal · 超低卡充水</div>
             </button>
           </div>
         </div>
@@ -8463,222 +8604,174 @@ function getPlateHtml() {
     `;
   } else {
     itemsHtml = `
-      <div class="space-y-3">
-        ${state.plateItems
-          .map((item, idx) => {
-            const fruit = getFruit(item.fruitId);
-            const nut = calcItemNut(fruit, item.grams);
-            const su = fruit.serving_unit;
-            return `
-              <div class="bg-white rounded-2xl p-5 border border-slate-200/70 shadow-soft hover:shadow-card transition">
-                <div class="flex items-start justify-between">
-                  <div class="flex items-center space-x-3 cursor-pointer group" onclick="openDetailModal('${fruit.id}')">
-                    <div class="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-3xl border border-slate-100 group-hover:scale-105 transition-transform">
-                      ${fruit.emoji}
-                    </div>
-                    <div>
-                      <div class="flex items-center space-x-2 flex-wrap gap-y-1">
-                        <h4 class="font-bold text-slate-800 text-base group-hover:text-emerald-600 transition-colors">
-                          ${fruit.name}
-                        </h4>
-                        <span class="text-2xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
-                          ${fruit.category}
-                        </span>
-                        <!-- 常溫鮮果 vs 冷凍水果切換按鈕 -->
-                        <button
-                          type="button"
-                          onclick="event.stopPropagation(); togglePlateItemStorageType(${idx})"
-                          class="px-2 py-0.5 rounded-lg text-2xs font-bold transition flex items-center space-x-1 shadow-2xs ${
-                            (item.storageType || 'fresh') === 'frozen'
-                              ? 'bg-sky-100 text-sky-800 border border-sky-300 hover:bg-sky-200'
-                              : 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
-                          }"
-                          title="點擊在此水果切換：常溫鮮果 vs 冷凍水果"
-                        >
-                          <span>${(item.storageType || 'fresh') === 'frozen' ? '❄️ 冷凍水果' : '🌱 常溫鮮果'}</span>
-                          <span class="text-3xs text-slate-400">⇄</span>
-                        </button>
-                      </div>
-                      <div class="text-xs text-slate-400 mt-0.5">
-                        每 100g: ${fruit.nutrition_per_100g.calories} kcal · 糖 ${fruit.nutrition_per_100g.sugar}g · 維C ${fruit.nutrition_per_100g.vitamin_c}mg
-                      </div>
-                    </div>
-                  </div>
-                  <button onclick="removePlateItem(${idx})" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition" title="移除此水果">
-                    🗑️
-                  </button>
-                </div>
+      <div class="space-y-2">
+        ${state.plateItems.map((item, idx) => {
+          const fruit = getFruit(item.fruitId);
+          const nut = calcItemNut(fruit, item.grams);
+          const su = fruit.serving_unit;
+          const storageType = item.storageType || 'fresh';
+          const isFrozen = storageType === 'frozen';
+          const costCfg = getFruitCostConfig(fruit.id, storageType);
+          const effectiveKg = costCfg.purchasePrice / (costCfg.yieldRate / 100);
+          const itemCost = item.grams * (effectiveKg / 1000);
 
-                <!-- Weight Controls -->
-                <div class="mt-4 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                    <button onclick="updateGrams(${idx}, 100)" class="px-2.5 py-1 text-2xs font-medium rounded-lg transition ${
-                      item.grams === 100 ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }">
-                      100g
-                    </button>
-                    ${
-                      su
-                        ? `
-                      <button onclick="updateGrams(${idx}, ${su.grams})" class="px-2.5 py-1 text-2xs font-medium rounded-lg transition ${
-                            item.grams === su.grams ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }">
-                        1 ${su.name} (${su.grams}g)
-                      </button>
-                      <button onclick="updateGrams(${idx}, ${Math.round(su.grams / 2)})" class="px-2.5 py-1 text-2xs font-medium rounded-lg transition ${
-                            item.grams === Math.round(su.grams / 2) ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }">
-                        半${su.name.charAt(0)} (${Math.round(su.grams / 2)}g)
-                      </button>
-                    `
-                        : ''
-                    }
-                  </div>
+          return `
+            <div
+              id="plate-row-${idx}"
+              class="plate-drag-row bg-slate-50/90 hover:bg-white rounded-2xl p-2.5 sm:p-3 border border-slate-200/80 transition-all shadow-2xs group cursor-default"
+              draggable="true"
+              ondragstart="handleRowDragStart(event, ${idx})"
+              ondragover="handleRowDragOver(event, ${idx})"
+              ondragleave="handleRowDragLeave(event, ${idx})"
+              ondrop="handleRowDrop(event, ${idx})"
+              ondragend="handleRowDragEnd(event)"
+            >
+              <!-- 主列控制列 (一眼全部看得到的高密度設計) -->
+              <div class="flex items-center justify-between gap-1.5 sm:gap-2">
+                <!-- 拖曳排序握把 -->
+                <span
+                  class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 px-1 py-0.5 text-base select-none shrink-0"
+                  title="按住拖曳上下調整配方順序"
+                >
+                  ⋮⋮
+                </span>
 
-                  <div class="flex items-center space-x-1 sm:space-x-1.5 self-end sm:self-auto flex-wrap">
-                    <!-- 減少 10g & 1g 按鈕 -->
-                    <div class="flex items-center space-x-1">
-                      <button
-                        type="button"
-                        onclick="adjustGrams(${idx}, -10)"
-                        class="px-2 py-1 text-2xs font-bold text-slate-600 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200/80 transition select-none shadow-2xs"
-                        title="減少 10g"
-                      >
-                        -10
-                      </button>
-                      <button
-                        type="button"
-                        onclick="adjustGrams(${idx}, -1)"
-                        class="px-2 py-1 text-2xs font-bold text-slate-600 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200/80 transition select-none shadow-2xs"
-                        title="減少 1g"
-                      >
-                        -1
-                      </button>
-                    </div>
-
-                    <!-- 拉條 (Slider) -->
-                    <input
-                      id="plate-range-${idx}"
-                      type="range"
-                      min="1"
-                      max="500"
-                      step="1"
-                      value="${item.grams}"
-                      oninput="updateGrams(${idx}, Number(this.value))"
-                      class="w-20 sm:w-28 accent-emerald-600 cursor-pointer"
-                      title="滑動微調重量"
-                    />
-
-                    <!-- 增加 1g & 10g 按鈕 -->
-                    <div class="flex items-center space-x-1">
-                      <button
-                        type="button"
-                        onclick="adjustGrams(${idx}, 1)"
-                        class="px-2 py-1 text-2xs font-bold text-slate-600 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200/80 transition select-none shadow-2xs"
-                        title="增加 1g"
-                      >
-                        +1
-                      </button>
-                      <button
-                        type="button"
-                        onclick="adjustGrams(${idx}, 10)"
-                        class="px-2 py-1 text-2xs font-bold text-slate-600 bg-slate-100 hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200/80 transition select-none shadow-2xs"
-                        title="增加 10g"
-                      >
-                        +10
-                      </button>
-                    </div>
-
-                    <!-- 數字精準輸入框 -->
-                    <div class="flex items-center space-x-1 ml-1">
-                      <input
-                        id="plate-num-${idx}"
-                        type="number"
-                        min="1"
-                        max="1000"
-                        value="${item.grams}"
-                        onchange="updateGrams(${idx}, Math.max(1, Number(this.value) || 1))"
-                        class="w-14 px-1.5 py-1 text-xs font-bold text-center bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                      />
-                      <span class="text-xs font-medium text-slate-500">g</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Subtotal metrics -->
-                <div class="mt-3 flex items-center justify-between text-2xs bg-emerald-50/60 rounded-xl px-3 py-2 border border-emerald-100/50">
-                  <span class="font-medium text-emerald-900">
-                    本項攝取：<strong>${nut.calories}</strong> kcal
+                <!-- 水果 Emoji 與名稱 (點擊看圖鑑) -->
+                <div
+                  class="flex items-center space-x-1.5 shrink-0 cursor-pointer min-w-0"
+                  onclick="openDetailModal('${fruit.id}')"
+                  title="查看 ${fruit.name} 完整營養資訊"
+                >
+                  <span class="text-xl shrink-0 group-hover:scale-105 transition-transform">${fruit.emoji}</span>
+                  <span class="font-bold text-xs sm:text-sm text-slate-800 hover:text-emerald-600 transition truncate max-w-[70px] sm:max-w-[105px]">
+                    ${fruit.name}
                   </span>
-                  <div class="flex items-center space-x-3 text-slate-600">
-                    <span>糖: <strong class="text-amber-700">${nut.sugar}g</strong></span>
-                    <span>纖維: <strong class="text-emerald-700">${nut.dietary_fiber}g</strong></span>
-                    <span>維C: <strong class="text-orange-700">${nut.vitamin_c}mg</strong></span>
+                </div>
+
+                <!-- 常溫 vs 冷凍切換鈕 -->
+                <button
+                  type="button"
+                  onclick="event.stopPropagation(); togglePlateItemStorageType(${idx})"
+                  class="px-1.5 py-0.5 rounded-md text-3xs font-bold transition flex items-center space-x-0.5 shrink-0 shadow-2xs ${
+                    isFrozen
+                      ? 'bg-sky-100 text-sky-800 border border-sky-300 hover:bg-sky-200'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200'
+                  }"
+                  title="點擊切換常溫鮮果 vs IQF冷凍水果"
+                >
+                  <span>${isFrozen ? '❄️冷凍' : '🌱常溫'}</span>
+                </button>
+
+                <!-- 重量控制區：-10 / 滑桿 / +10 / 輸入框 -->
+                <div class="flex items-center space-x-1 shrink-0 ml-auto">
+                  <button
+                    type="button"
+                    onclick="adjustGrams(${idx}, -10)"
+                    class="w-6 h-6 flex items-center justify-center text-3xs font-bold text-slate-600 bg-white hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200 transition select-none shadow-2xs"
+                    title="減少 10g"
+                  >
+                    -10
+                  </button>
+
+                  <input
+                    id="plate-range-${idx}"
+                    type="range"
+                    min="1"
+                    max="500"
+                    step="1"
+                    value="${item.grams}"
+                    oninput="updateGrams(${idx}, Number(this.value))"
+                    class="w-14 sm:w-20 md:w-24 accent-emerald-600 cursor-pointer"
+                    title="滑動微調重量"
+                  />
+
+                  <button
+                    type="button"
+                    onclick="adjustGrams(${idx}, 10)"
+                    class="w-6 h-6 flex items-center justify-center text-3xs font-bold text-slate-600 bg-white hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200 transition select-none shadow-2xs"
+                    title="增加 10g"
+                  >
+                    +10
+                  </button>
+
+                  <div class="flex items-center space-x-0.5">
+                    <input
+                      id="plate-num-${idx}"
+                      type="number"
+                      min="1"
+                      max="1000"
+                      value="${item.grams}"
+                      onchange="updateGrams(${idx}, Math.max(1, Number(this.value) || 1))"
+                      class="w-12 px-1 py-0.5 text-xs font-bold text-center bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
+                    />
+                    <span class="text-3xs font-medium text-slate-400">g</span>
                   </div>
                 </div>
 
-                <!-- Raw Material Cost Strip (常溫/冷凍雙軌支援) -->
-                ${(() => {
-                  const storageType = item.storageType || 'fresh';
-                  const isFrozen = storageType === 'frozen';
-                  const costCfg = getFruitCostConfig(fruit.id, storageType);
-                  const effectiveKg = costCfg.purchasePrice / (costCfg.yieldRate / 100);
-                  const itemCost = item.grams * (effectiveKg / 1000);
-                  const rawNeeded = item.grams / (costCfg.yieldRate / 100);
-                  const bgClass = isFrozen ? 'bg-sky-50/70 border-sky-200/70' : 'bg-amber-50/70 border-amber-200/60';
-                  const textClass = isFrozen ? 'text-sky-950' : 'text-amber-950';
-                  const boldClass = isFrozen ? 'text-sky-900' : 'text-amber-900';
-                  const badgeClass = isFrozen ? 'text-sky-800/90 bg-sky-100/90 border-sky-200' : 'text-amber-800/80 bg-amber-100/80 border-amber-200';
-                  const borderFocus = isFrozen ? 'border-sky-300 focus:ring-sky-500' : 'border-amber-300 focus:ring-amber-500';
+                <!-- 本項熱量標籤 -->
+                <div class="text-right text-3xs font-semibold text-slate-500 shrink-0 hidden md:block min-w-[46px]">
+                  <span class="text-emerald-700 font-bold">${nut.calories}</span>k
+                </div>
 
-                  return `
-                    <div class="mt-2 flex flex-wrap items-center justify-between text-2xs ${bgClass} rounded-xl px-3 py-2 border gap-y-1.5">
-                      <div class="flex items-center space-x-2 ${textClass} font-medium flex-wrap gap-y-1">
-                        <span>💰 ${isFrozen ? '❄️ 冷凍成本' : '🌱 常溫成本'}：<strong class="${boldClass} text-xs font-extrabold">$ ${itemCost.toFixed(1)}</strong> 元</span>
-                        <span class="text-3xs ${badgeClass} border px-1.5 py-0.2 rounded font-semibold" title="需採購原料約 ${Math.round(rawNeeded)}g">
-                          實質 $${Math.round(effectiveKg)}/kg (${costCfg.yieldRate}%)
-                        </span>
-                      </div>
-                      <div class="flex items-center space-x-2 text-slate-600">
-                        <label class="flex items-center space-x-1" title="${isFrozen ? '冷凍' : '常溫'}每公斤進貨價格">
-                          <span class="text-3xs text-slate-500">進貨:</span>
-                          <input
-                            id="plate-fruit-price-${fruit.id}-${storageType}"
-                            type="number"
-                            min="1"
-                            step="1"
-                            value="${costCfg.purchasePrice}"
-                            onchange="updateFruitCost('${fruit.id}', '${storageType}', 'purchasePrice', this.value)"
-                            class="w-14 px-1 py-0.5 text-3xs font-bold text-center bg-white border ${borderFocus} rounded focus:ring-1"
-                          />
-                          <span class="text-3xs text-slate-400">元/kg</span>
-                        </label>
-                        <label class="flex items-center space-x-1" title="${isFrozen ? '解凍出成率' : '加工取果率'}百分比">
-                          <span class="text-3xs text-slate-500">${isFrozen ? '出成:' : '取果:'}</span>
-                          <input
-                            id="plate-fruit-yield-${fruit.id}-${storageType}"
-                            type="number"
-                            min="1"
-                            max="100"
-                            step="1"
-                            value="${costCfg.yieldRate}"
-                            onchange="updateFruitCost('${fruit.id}', '${storageType}', 'yieldRate', this.value)"
-                            class="w-11 px-1 py-0.5 text-3xs font-bold text-center bg-white border ${borderFocus} rounded focus:ring-1"
-                          />
-                          <span class="text-3xs text-slate-400">%</span>
-                        </label>
-                      </div>
-                    </div>
-                  `;
-                })()}
+                <!-- 移除按鈕 -->
+                <button
+                  onclick="removePlateItem(${idx})"
+                  class="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition shrink-0 text-xs"
+                  title="移除此原料"
+                >
+                  🗑️
+                </button>
               </div>
-            `;
-          })
-          .join('')}
+
+              <!-- 緊湊附屬列：常用份量快選 + 關鍵營養 + 原料成本 -->
+              <div class="mt-1.5 pt-1.5 border-t border-slate-200/50 flex items-center justify-between text-3xs text-slate-500 flex-wrap gap-y-1">
+                <div class="flex items-center space-x-1">
+                  <button
+                    onclick="updateGrams(${idx}, 100)"
+                    class="px-1.5 py-0.2 rounded font-medium transition ${
+                      item.grams === 100 ? 'bg-slate-700 text-white font-bold' : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200/70'
+                    }"
+                  >
+                    100g
+                  </button>
+                  ${su ? `
+                    <button
+                      onclick="updateGrams(${idx}, ${su.grams})"
+                      class="px-1.5 py-0.2 rounded font-medium transition ${
+                        item.grams === su.grams ? 'bg-slate-700 text-white font-bold' : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200/70'
+                      }"
+                    >
+                      1${su.name}(${su.grams}g)
+                    </button>
+                    <button
+                      onclick="updateGrams(${idx}, ${Math.round(su.grams / 2)})"
+                      class="px-1.5 py-0.2 rounded font-medium transition ${
+                        item.grams === Math.round(su.grams / 2) ? 'bg-slate-700 text-white font-bold' : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200/70'
+                      }"
+                    >
+                      半${su.name.charAt(0)}(${Math.round(su.grams / 2)}g)
+                    </button>
+                  ` : ''}
+                </div>
+
+                <div class="flex items-center space-x-2 text-slate-600 font-medium">
+                  <span>糖: <strong class="text-amber-700">${nut.sugar}g</strong></span>
+                  <span>纖維: <strong class="text-emerald-700">${nut.dietary_fiber}g</strong></span>
+                  <span>維C: <strong class="text-orange-700">${nut.vitamin_c}mg</strong></span>
+                  <span class="text-slate-300">|</span>
+                  <span title="進貨 $${costCfg.purchasePrice}/kg · 出成 ${costCfg.yieldRate}%">
+                    💰 <strong class="${isFrozen ? 'text-sky-800' : 'text-amber-800'}">$${itemCost.toFixed(1)}</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
     `;
   }
 
+  // 智慧建議
   const insightsHtml =
     insights.length > 0
       ? `
@@ -8686,121 +8779,126 @@ function getPlateHtml() {
         <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
           <span>✨ 智慧飲食分析建議</span>
         </h4>
-        <div class="space-y-2">
-          ${insights
-            .map(
-              (ins) => `
-            <div class="p-3 rounded-2xl text-xs flex items-start space-x-2.5 ${
+        <div class="space-y-1.5">
+          ${insights.map(ins => `
+            <div class="p-2.5 rounded-xl text-xs flex items-start space-x-2 ${
               ins.type === 'warning'
                 ? 'bg-amber-50 border border-amber-200/70 text-amber-900'
                 : ins.type === 'success'
                 ? 'bg-emerald-50 border border-emerald-200/70 text-emerald-900'
                 : 'bg-sky-50 border border-sky-200/70 text-sky-900'
             }">
-              <span class="text-base">${ins.type === 'warning' ? '⚠️' : ins.type === 'success' ? '✅' : '💡'}</span>
+              <span class="text-sm shrink-0">${ins.type === 'warning' ? '⚠️' : ins.type === 'success' ? '✅' : '💡'}</span>
               <div>
-                <div class="font-bold">${ins.title}</div>
-                <div class="text-3xs sm:text-xs mt-0.5 opacity-90 leading-relaxed">${ins.text}</div>
+                <div class="font-bold text-xs">${ins.title}</div>
+                <div class="text-3xs mt-0.5 opacity-90 leading-relaxed">${ins.text}</div>
               </div>
             </div>
-          `
-            )
-            .join('')}
+          `).join('')}
         </div>
       </div>
     `
       : '';
 
+  // 比例條調色盤
+  const paletteBarColors = ['#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#8b5cf6', '#f97316', '#14b8a6', '#6366f1'];
+
   return `
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      <!-- Left Column: Plate List -->
-      <div class="lg:col-span-7 space-y-4 no-print">
-        <div class="bg-white rounded-3xl p-6 shadow-soft border border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-3.5 xl:gap-4 items-start">
+      <!-- 欄 1: 水果與原料庫 (Fruit Palette - 可拖曳 / 點擊加入) -->
+      ${paletteHtml}
+
+      <!-- 欄 2: 緊湊拖曳配方表 (Draggable Recipe Table & Drop Zone) -->
+      <div class="lg:col-span-5 xl:col-span-5 space-y-3 no-print">
+        <!-- 頂部操作列 -->
+        <div class="bg-white rounded-2xl p-3 sm:p-4 shadow-soft border border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
             <div class="flex items-center space-x-2">
-              <h2 class="text-xl font-bold text-slate-800">今日水果搭配</h2>
-              <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
-                ${state.plateItems.length} 種水果
+              <h2 class="text-base sm:text-lg font-bold text-slate-800 flex items-center space-x-1.5">
+                <span>🥗</span>
+                <span>今日水果配方</span>
+              </h2>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold font-mono">
+                ${state.plateItems.length} 種 · ${totals.weight}g
               </span>
             </div>
-            <p class="text-xs text-slate-500 mt-1">自由調整公克數或切換生活份量，即時換算總營養攝取</p>
+            <p class="text-3xs text-slate-400 mt-0.5">
+              按住 <strong class="text-slate-600">⋮⋮</strong> 可拖曳排序，即時連動右側標籤貼紙
+            </p>
           </div>
-          <div class="flex items-center space-x-1.5 flex-wrap gap-y-2">
-            <button onclick="saveCurrentRecipePrompt()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none shadow-2xs" title="儲存當前搭配至記憶清單">
-              <span>💾 儲存搭配</span>
+          <div class="flex items-center space-x-1.5 flex-wrap">
+            <button onclick="saveCurrentRecipePrompt()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="px-2.5 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none shadow-2xs" title="儲存當前搭配至記憶清單">
+              <span>💾 儲存</span>
             </button>
-            <button onclick="openRecipesModal()" class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center space-x-1 shadow-2xs" title="查看已儲存搭配">
+            <button onclick="openRecipesModal()" class="px-2.5 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center space-x-1 shadow-2xs" title="查看已儲存搭配">
               <span>📂 我的搭配</span>
               ${state.savedRecipes.length > 0 ? `<span class="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-3xs font-bold rounded-full">${state.savedRecipes.length}</span>` : ''}
             </button>
-            <button onclick="exportPlateToCSV()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none shadow-2xs" title="匯出成 Excel CSV 報表">
-              <span>📊 匯出 CSV</span>
+            <button onclick="exportPlateToCSV()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none shadow-2xs" title="匯出成 Excel CSV 報表">
+              <span>📊 報表</span>
             </button>
-            ${
-              state.plateItems.length > 0
-                ? `
-              <button onclick="clearPlate()" class="px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition flex items-center space-x-1">
+            ${state.plateItems.length > 0 ? `
+              <button onclick="clearPlate()" class="px-2 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition" title="清空所有原料">
                 <span>清空</span>
               </button>
-            `
-                : ''
-            }
-            <button onclick="switchTab('catalog')" class="px-3.5 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition flex items-center space-x-1">
-              <span>+ 新增水果</span>
-            </button>
+            ` : ''}
           </div>
         </div>
 
-        ${
-          state.favorites && state.favorites.length > 0
-            ? `
-        <!-- Pinned Favorites Quick-Add Bar -->
-        <div class="bg-amber-50/70 border border-amber-200/80 rounded-2xl px-4 py-3 flex items-center justify-between flex-wrap gap-2.5 shadow-2xs">
-          <div class="flex items-center space-x-1.5 text-xs font-bold text-amber-900 shrink-0">
-            <span class="text-sm">⭐</span>
-            <span>常用置頂水果快速加入：</span>
-          </div>
-          <div class="flex items-center space-x-2 overflow-x-auto py-0.5 text-xs flex-wrap gap-y-1.5">
-            ${state.favorites
-              .map((fid) => {
-                const f = getFruit(fid);
-                if (!f) return '';
-                const inPlate = state.plateItems.some((item) => item.fruitId === f.id);
+        <!-- 水果配比長條圖 (一眼看穿配比) -->
+        ${state.plateItems.length > 0 && totals.weight > 0 ? `
+          <div class="bg-white rounded-2xl p-2.5 border border-slate-200/60 shadow-2xs space-y-1.5">
+            <div class="flex items-center justify-between text-2xs text-slate-600 font-semibold">
+              <span>📊 配方比例長條圖</span>
+              <span class="text-3xs text-slate-400 font-normal">總重 ${totals.weight}g · ${totals.calories} kcal</span>
+            </div>
+            <div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+              ${state.plateItems.map((item, idx) => {
+                const fruit = getFruit(item.fruitId);
+                const pct = Math.round((item.grams / totals.weight) * 1000) / 10;
+                const color = paletteBarColors[idx % paletteBarColors.length];
+                return `<div style="width: ${pct}%; background-color: ${color};" class="h-full transition-all duration-300 relative group cursor-pointer" title="${fruit.name}: ${item.grams}g (${pct}%)"></div>`;
+              }).join('')}
+            </div>
+            <div class="flex items-center flex-wrap gap-x-2 gap-y-0.5 text-3xs text-slate-500 pt-0.5">
+              ${state.plateItems.map((item, idx) => {
+                const fruit = getFruit(item.fruitId);
+                const pct = Math.round((item.grams / totals.weight) * 100);
+                const color = paletteBarColors[idx % paletteBarColors.length];
                 return `
-                  <button
-                    onclick="addToPlate('${f.id}', ${f.serving_unit?.grams || 100})"
-                    class="px-2.5 py-1 bg-white hover:bg-amber-100 text-slate-800 hover:text-amber-900 border border-amber-200 rounded-xl transition flex items-center space-x-1 text-xs font-medium shadow-2xs group"
-                    title="快速加入 ${f.name} 到搭配 (預設 ${f.serving_unit?.grams || 100}g)"
-                  >
-                    <span>${f.emoji}</span>
-                    <span>${f.name}</span>
-                    <span class="text-3xs text-amber-600 font-bold group-hover:scale-110 transition-transform">${
-                      inPlate ? '再加' : '+'
-                    }</span>
-                  </button>
+                  <div class="flex items-center space-x-1">
+                    <span class="w-1.5 h-1.5 rounded-full inline-block shrink-0" style="background-color: ${color};"></span>
+                    <span class="font-medium text-slate-700">${fruit.name}</span>
+                    <span class="text-slate-400 font-mono">${pct}%</span>
+                  </div>
                 `;
-              })
-              .join('')}
-            <button onclick="switchTab('catalog')" class="text-2xs text-amber-700 hover:underline px-1 py-0.5 font-medium ml-1">
-              更多水果 ↗
-            </button>
+              }).join('')}
+            </div>
           </div>
-        </div>
-        `
-            : ''
-        }
+        ` : ''}
 
-        ${itemsHtml}
+        <!-- 拖曳放置目標區與配方清單 -->
+        <div
+          id="plate-drop-zone"
+          ondragover="handlePlateDragOver(event)"
+          ondragleave="handlePlateDragLeave(event)"
+          ondrop="handlePlateDrop(event)"
+          class="bg-white rounded-3xl p-3 sm:p-4 border-2 border-dashed border-slate-200/80 shadow-soft transition min-h-[300px]"
+        >
+          ${itemsHtml}
+        </div>
+
+        ${insightsHtml}
       </div>
 
-            <!-- Right Column: Nutrition Summary / TFDA Label Card -->
-      <div class="lg:col-span-5 sticky top-20" id="print-area">
-        <div class="bg-white rounded-3xl p-6 shadow-soft border border-slate-200/60 space-y-5">
-          <!-- Segmented Tab Switcher (健康攝取 vs 商品法規標籤 vs 原料成本試算) -->
+      <!-- 欄 3: 即時標籤與健康儀表板 (Live Label & Health Gauges) -->
+      <div class="lg:col-span-4 xl:col-span-4 lg:sticky lg:top-20 max-h-[calc(100vh-100px)] overflow-y-auto pr-1" id="print-area">
+        <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-soft border border-slate-200/60 space-y-4">
+          <!-- 頁籤切換器 (健康攝取 vs 法規標籤 vs 原料成本) -->
           <div class="flex items-center p-1 bg-slate-100/90 rounded-2xl text-xs font-bold no-print border border-slate-200/50">
             <button
               onclick="switchPlateRightTab('summary')"
-              class="flex-1 py-2 px-2 sm:px-3 rounded-xl transition flex items-center justify-center space-x-1 ${
+              class="flex-1 py-1.5 px-2 rounded-xl transition flex items-center justify-center space-x-1 ${
                 state.plateRightTab === 'summary'
                   ? 'bg-white text-slate-800 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
@@ -8810,191 +8908,189 @@ function getPlateHtml() {
             </button>
             <button
               onclick="switchPlateRightTab('label')"
-              class="flex-1 py-2 px-2 sm:px-3 rounded-xl transition flex items-center justify-center space-x-1 ${
+              class="flex-1 py-1.5 px-2 rounded-xl transition flex items-center justify-center space-x-1 ${
                 state.plateRightTab === 'label'
                   ? 'bg-white text-slate-800 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
               }"
             >
               <span>🏷️ 法規標籤</span>
-              <span class="text-3xs bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-semibold">TFDA</span>
+              <span class="text-3xs bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-semibold">TFDA</span>
             </button>
             <button
               onclick="switchPlateRightTab('cost')"
-              class="flex-1 py-2 px-2 sm:px-3 rounded-xl transition flex items-center justify-center space-x-1 ${
+              class="flex-1 py-1.5 px-2 rounded-xl transition flex items-center justify-center space-x-1 ${
                 state.plateRightTab === 'cost'
                   ? 'bg-white text-amber-800 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
               }"
             >
               <span>💰 原料成本</span>
-              <span class="text-3xs bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-semibold">試算</span>
+              <span class="text-3xs bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-semibold">試算</span>
             </button>
           </div>
 
           ${
             state.plateRightTab === 'summary'
               ? `
-            <!-- Health Summary View -->
-            <div class="space-y-6">
+            <!-- 健康攝取檢視 -->
+            <div class="space-y-4">
               <div class="flex items-start justify-between">
                 <div>
-                  <span class="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">
-                    水果搭配綜合營養統計
+                  <span class="text-2xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                    水果配方營養統計
                   </span>
-                  <h3 class="text-lg font-bold text-slate-800 mt-2">健康攝取儀表板</h3>
+                  <h3 class="text-base font-bold text-slate-800 mt-1">健康攝取儀表板</h3>
                 </div>
-                <div class="flex items-center space-x-1.5">
-                  <button onclick="exportPlateToCSV()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="p-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition disabled:opacity-40 disabled:pointer-events-none flex items-center space-x-1 text-xs font-semibold" title="匯出 CSV 試算表">
-                    <span>📊 匯出 CSV</span>
-                  </button>
-                  <button onclick="copySummaryText()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 transition disabled:opacity-40 disabled:pointer-events-none flex items-center space-x-1 text-xs font-medium" id="copy-btn">
-                    📋 複製摘要
-                  </button>
-                </div>
-              </div>
-
-              <!-- Total Calories & Servings -->
-              <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-md flex items-center justify-between">
-                <div>
-                  <span class="text-xs text-slate-300 font-medium flex items-center space-x-1">
-                    <span>🔥 總熱量累計</span>
-                  </span>
-                  <div class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-1">
-                    ${totals.calories}
-                    <span class="text-sm sm:text-base font-normal text-slate-300 ml-1.5">kcal</span>
-                  </div>
-                  <div class="text-xs text-slate-400 mt-1">
-                    總重 ${totals.weight} g · 水分約 ${totals.water} g
-                  </div>
-                </div>
-                <div class="text-right border-l border-slate-700/80 pl-5">
-                  <div class="text-xs text-slate-300 font-medium">水果份量估算</div>
-                  <div class="text-2xl sm:text-3xl font-bold text-emerald-400 mt-1">
-                    ${totals.servings}
-                    <span class="text-xs text-slate-300 font-normal ml-1">份</span>
-                  </div>
-                  <div class="text-3xs text-slate-400 mt-0.5">國健署建議每日 2~3 份</div>
-                </div>
-              </div>
-
-              <!-- Macronutrients ratio -->
-              <div>
-                <div class="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2">
-                  <span>三大營養素熱量佔比</span>
-                  <span class="text-slate-400 text-3xs font-normal">碳水 / 蛋白 / 脂肪</span>
-                </div>
-                <div class="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
-                  <div style="width: ${totals.macroPercentages.carb}%" class="bg-amber-400 h-full transition-all duration-300"></div>
-                  <div style="width: ${totals.macroPercentages.protein}%" class="bg-emerald-500 h-full transition-all duration-300"></div>
-                  <div style="width: ${totals.macroPercentages.fat}%" class="bg-rose-400 h-full transition-all duration-300"></div>
-                </div>
-                <div class="flex items-center justify-between text-2xs mt-2 text-slate-500">
-                  <div class="flex items-center space-x-1">
-                    <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
-                    <span>碳水: ${totals.carbohydrates}g (${totals.macroPercentages.carb}%)</span>
-                  </div>
-                  <div class="flex items-center space-x-1">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                    <span>蛋白: ${totals.protein}g (${totals.macroPercentages.protein}%)</span>
-                  </div>
-                  <div class="flex items-center space-x-1">
-                    <span class="w-2 h-2 rounded-full bg-rose-400 inline-block"></span>
-                    <span>脂肪: ${totals.fat}g (${totals.macroPercentages.fat}%)</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Key Health Goals -->
-              <div class="space-y-3.5 pt-2 border-t border-slate-100">
-                <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  關鍵健康指標 (對照每日成人標準)
-                </h4>
-
-                <!-- Vitamin C -->
-                <div>
-                  <div class="flex items-center justify-between text-xs mb-1">
-                    <span class="font-medium text-slate-700">維生素 C (每日目標 100mg)</span>
-                    <span class="font-bold text-orange-600">${totals.vitamin_c} mg (${vitCPct}%)</span>
-                  </div>
-                  <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div style="width: ${Math.min(100, vitCPct)}%" class="bg-orange-500 h-full rounded-full transition-all duration-300"></div>
-                  </div>
-                </div>
-
-                <!-- Dietary Fiber -->
-                <div>
-                  <div class="flex items-center justify-between text-xs mb-1">
-                    <span class="font-medium text-slate-700">膳食纖維 (水果建議目標 ~6g)</span>
-                    <span class="font-bold text-emerald-600">${totals.dietary_fiber} g (${fiberPct}%)</span>
-                  </div>
-                  <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div style="width: ${Math.min(100, fiberPct)}%" class="bg-emerald-500 h-full rounded-full transition-all duration-300"></div>
-                  </div>
-                </div>
-
-                <!-- Sugar Warning -->
-                <div>
-                  <div class="flex items-center justify-between text-xs mb-1">
-                    <span class="font-medium text-slate-700">總糖含量 (建議單次 &lt; 30g)</span>
-                    <span class="font-bold ${totals.sugar > 30 ? 'text-rose-600' : 'text-amber-600'}">
-                      ${totals.sugar} g ${totals.sugar > 30 ? '<span class="text-3xs text-rose-500 font-semibold">(偏高)</span>' : ''}
-                    </span>
-                  </div>
-                  <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div style="width: ${Math.min(100, sugarPct)}%" class="h-full rounded-full transition-all duration-300 ${totals.sugar > 30 ? 'bg-rose-500' : 'bg-amber-400'}"></div>
-                  </div>
-                </div>
-
-                <!-- Minerals -->
-                <div class="flex items-center justify-between text-xs pt-1">
-                  <span class="font-medium text-slate-600">鉀離子 (電解質)</span>
-                  <span class="font-bold text-slate-800">${totals.potassium} mg</span>
-                </div>
-                <div class="flex items-center justify-between text-xs">
-                  <span class="font-medium text-slate-600">鎂元素 (放鬆神經)</span>
-                  <span class="font-bold text-slate-800">${totals.magnesium} mg</span>
-                </div>
-                <div class="flex items-center justify-between text-xs">
-                  <span class="font-medium text-slate-600">鈣質</span>
-                  <span class="font-bold text-slate-800">${totals.calcium} mg</span>
-                </div>
-              </div>
-
-              ${insightsHtml}
-            </div>
-          `
-              : state.plateRightTab === 'label'
-              ? `
-            <!-- TFDA Nutrition Label View -->
-            <div class="space-y-4">
-              <div class="flex items-center justify-between no-print">
-                <div>
-                  <span class="text-xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg">
-                    商品法規營養標示
-                  </span>
-                  <h3 class="text-base font-bold text-slate-800 mt-1">依水果搭配總重即時換算</h3>
-                </div>
-                <div class="flex items-center space-x-1.5">
-                  <button onclick="downloadLabelImage(2)" class="px-2.5 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition flex items-center space-x-1 active:scale-95" id="plate-download-label-btn" title="直接下載商品標籤 PNG 圖片">
-                    <span>🖼️ 下載圖片</span>
-                  </button>
-                  <button onclick="window.print()" class="px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-xs transition flex items-center space-x-1">
-                    <span>🖨️ 印貼紙</span>
-                  </button>
-                  <button onclick="exportPlateToCSV()" class="px-2 py-1.5 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl transition flex items-center space-x-1" title="匯出商品標籤與內容明細 CSV">
+                <div class="flex items-center space-x-1">
+                  <button onclick="exportPlateToCSV()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="p-1.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition disabled:opacity-40 disabled:pointer-events-none flex items-center space-x-1 text-2xs font-semibold" title="匯出 CSV 試算表">
                     <span>📊 CSV</span>
                   </button>
-                  <button onclick="copyLabelPlainText()" class="px-2 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition flex items-center space-x-1" id="copy-label-btn">
+                  <button onclick="copySummaryText()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 transition disabled:opacity-40 disabled:pointer-events-none flex items-center space-x-1 text-2xs font-medium" id="copy-btn">
                     <span>📋 複製</span>
                   </button>
                 </div>
               </div>
 
-              <!-- Quick Packaging Config -->
-              <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/70 space-y-2.5 text-xs no-print">
+              <!-- 總熱量與份量 -->
+              <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-4 shadow-md flex items-center justify-between">
                 <div>
-                  <label class="font-semibold text-slate-600 block mb-1 text-2xs">商品品名</label>
+                  <span class="text-3xs text-slate-300 font-medium">🔥 總熱量累計</span>
+                  <div class="text-3xl font-extrabold tracking-tight mt-0.5">
+                    ${totals.calories}
+                    <span class="text-xs font-normal text-slate-300 ml-1">kcal</span>
+                  </div>
+                  <div class="text-3xs text-slate-400 mt-0.5">
+                    總重 ${totals.weight} g · 水分約 ${totals.water} g
+                  </div>
+                </div>
+                <div class="text-right border-l border-slate-700/80 pl-4">
+                  <div class="text-3xs text-slate-300 font-medium">份量估算</div>
+                  <div class="text-2xl font-bold text-emerald-400 mt-0.5">
+                    ${totals.servings}
+                    <span class="text-xs text-slate-300 font-normal ml-0.5">份</span>
+                  </div>
+                  <div class="text-3xs text-slate-400 mt-0.5">國健署每日 2~3 份</div>
+                </div>
+              </div>
+
+              <!-- 三大營養素比例條 -->
+              <div>
+                <div class="flex items-center justify-between text-2xs font-semibold text-slate-600 mb-1.5">
+                  <span>三大營養素熱量佔比</span>
+                  <span class="text-slate-400 text-3xs font-normal">碳水 / 蛋白 / 脂肪</span>
+                </div>
+                <div class="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                  <div style="width: ${totals.macroPercentages.carb}%" class="bg-amber-400 h-full transition-all duration-300"></div>
+                  <div style="width: ${totals.macroPercentages.protein}%" class="bg-emerald-500 h-full transition-all duration-300"></div>
+                  <div style="width: ${totals.macroPercentages.fat}%" class="bg-rose-400 h-full transition-all duration-300"></div>
+                </div>
+                <div class="flex items-center justify-between text-3xs mt-1.5 text-slate-500">
+                  <div class="flex items-center space-x-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>
+                    <span>碳水: ${totals.carbohydrates}g (${totals.macroPercentages.carb}%)</span>
+                  </div>
+                  <div class="flex items-center space-x-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                    <span>蛋白: ${totals.protein}g</span>
+                  </div>
+                  <div class="flex items-center space-x-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block"></span>
+                    <span>脂肪: ${totals.fat}g</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 關鍵健康指標 -->
+              <div class="space-y-3 pt-2 border-t border-slate-100">
+                <h4 class="text-2xs font-bold text-slate-700 uppercase tracking-wider">
+                  關鍵健康指標 (對照成人標準)
+                </h4>
+
+                <!-- 維生素 C -->
+                <div>
+                  <div class="flex items-center justify-between text-2xs mb-0.5">
+                    <span class="font-medium text-slate-700">維生素 C (每日目標 100mg)</span>
+                    <span class="font-bold text-orange-600">${totals.vitamin_c} mg (${vitCPct}%)</span>
+                  </div>
+                  <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div style="width: ${Math.min(100, vitCPct)}%" class="bg-orange-500 h-full rounded-full transition-all duration-300"></div>
+                  </div>
+                </div>
+
+                <!-- 膳食纖維 -->
+                <div>
+                  <div class="flex items-center justify-between text-2xs mb-0.5">
+                    <span class="font-medium text-slate-700">膳食纖維 (水果建議 ~6g)</span>
+                    <span class="font-bold text-emerald-600">${totals.dietary_fiber} g (${fiberPct}%)</span>
+                  </div>
+                  <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div style="width: ${Math.min(100, fiberPct)}%" class="bg-emerald-500 h-full rounded-full transition-all duration-300"></div>
+                  </div>
+                </div>
+
+                <!-- 總糖含量 -->
+                <div>
+                  <div class="flex items-center justify-between text-2xs mb-0.5">
+                    <span class="font-medium text-slate-700">總糖含量 (單次健康上限 30g)</span>
+                    <span class="font-bold ${totals.sugar > 30 ? 'text-rose-600' : 'text-amber-600'}">
+                      ${totals.sugar} g ${totals.sugar > 30 ? '<span class="text-3xs text-rose-500 font-semibold">(偏高)</span>' : ''}
+                    </span>
+                  </div>
+                  <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <div style="width: ${Math.min(100, sugarPct)}%" class="h-full rounded-full transition-all duration-300 ${totals.sugar > 30 ? 'bg-rose-500' : 'bg-amber-400'}"></div>
+                  </div>
+                </div>
+
+                <!-- 礦物質列表 -->
+                <div class="grid grid-cols-3 gap-1 pt-1 text-center bg-slate-50 p-2 rounded-xl text-3xs text-slate-600">
+                  <div>
+                    <span class="block text-slate-400">鉀</span>
+                    <strong class="font-bold text-slate-800 text-xs">${totals.potassium}</strong> mg
+                  </div>
+                  <div>
+                    <span class="block text-slate-400">鎂</span>
+                    <strong class="font-bold text-slate-800 text-xs">${totals.magnesium}</strong> mg
+                  </div>
+                  <div>
+                    <span class="block text-slate-400">鈣</span>
+                    <strong class="font-bold text-slate-800 text-xs">${totals.calcium}</strong> mg
+                  </div>
+                </div>
+              </div>
+            </div>
+          `
+              : state.plateRightTab === 'label'
+              ? `
+            <!-- 商品法規標籤檢視 (TFDA) -->
+            <div class="space-y-3.5">
+              <div class="flex items-center justify-between no-print">
+                <div>
+                  <span class="text-2xs font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200/50">
+                    商品法規標籤
+                  </span>
+                  <h3 class="text-sm font-bold text-slate-800 mt-1">配方總重即時換算</h3>
+                </div>
+                <div class="flex items-center space-x-1">
+                  <button onclick="downloadLabelImage(2)" class="px-2 py-1 text-2xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs transition flex items-center space-x-1 active:scale-95" id="plate-download-label-btn" title="下載標籤 PNG 圖片">
+                    <span>🖼️ 下載</span>
+                  </button>
+                  <button onclick="window.print()" class="px-2 py-1 text-2xs font-semibold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-xs transition flex items-center space-x-1">
+                    <span>🖨️ 列印</span>
+                  </button>
+                  <button onclick="exportPlateToCSV()" class="px-2 py-1 text-2xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl transition flex items-center space-x-1" title="匯出 CSV">
+                    <span>📊 CSV</span>
+                  </button>
+                  <button onclick="copyLabelPlainText()" class="px-2 py-1 text-2xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition flex items-center space-x-1" id="copy-label-btn">
+                    <span>📋 複製</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 包裝與標籤設定 -->
+              <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/70 space-y-2 text-xs no-print">
+                <div>
+                  <label class="font-semibold text-slate-600 block mb-1 text-3xs">商品品名</label>
                   <input
                     type="text"
                     value="${state.labelConfig.productName}"
@@ -9004,14 +9100,14 @@ function getPlateHtml() {
                   />
                 </div>
 
-                <!-- Total Weight & Serving Controls -->
-                <div class="bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200/70 flex items-center justify-between text-2xs">
+                <!-- 總重同步列 -->
+                <div class="bg-emerald-50/80 p-2 rounded-xl border border-emerald-200/70 flex items-center justify-between text-3xs">
                   <div>
-                    <span class="text-slate-500">搭配總重：</span>
+                    <span class="text-slate-500">配方總重：</span>
                     <strong class="text-emerald-800 text-xs">${totals.weight} g</strong>
                   </div>
-                  <button 
-                    onclick="toggleAutoSyncWeight()" 
+                  <button
+                    onclick="toggleAutoSyncWeight()"
                     class="px-2 py-0.5 rounded-md text-3xs font-bold transition flex items-center space-x-1 ${
                       state.labelConfig.autoSyncWeight
                         ? 'bg-emerald-600 text-white shadow-xs'
@@ -9022,49 +9118,49 @@ function getPlateHtml() {
                   </button>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2.5">
+                <div class="grid grid-cols-2 gap-2">
                   <div>
-                    <label class="font-semibold text-slate-600 block mb-1 text-2xs">每一份量 (g)</label>
-                    <input 
-                      type="number" 
-                      min="1" 
-                      max="2000" 
-                      value="${state.labelConfig.servingSize}" 
+                    <label class="font-semibold text-slate-600 block mb-0.5 text-3xs">每一份量 (g)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="2000"
+                      value="${state.labelConfig.servingSize}"
                       onchange="setManualServingSize(Number(this.value))"
-                      class="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center ${state.labelConfig.autoSyncWeight ? 'ring-1 ring-emerald-500 bg-emerald-50/30' : ''}"
+                      class="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center ${state.labelConfig.autoSyncWeight ? 'ring-1 ring-emerald-500 bg-emerald-50/30' : ''}"
                     />
                   </div>
                   <div>
-                    <label class="font-semibold text-slate-600 block mb-1 text-2xs">本包裝含 (份)</label>
-                    <input 
-                      type="number" 
-                      min="0.5" 
-                      max="50" 
-                      value="${state.labelConfig.servingsPerPkg}" 
+                    <label class="font-semibold text-slate-600 block mb-0.5 text-3xs">本包裝含 (份)</label>
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="50"
+                      value="${state.labelConfig.servingsPerPkg}"
                       onchange="updateLabelConfig('servingsPerPkg', Number(this.value)); syncLabelWeightWithPlate();"
-                      class="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center"
+                      class="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-center"
                     />
                   </div>
                 </div>
 
-                <!-- Format toggle -->
-                <div class="flex items-center space-x-2 pt-1">
-                  <button 
-                    onclick="updateLabelConfig('labelFormat', 'dual')" 
-                    class="flex-1 py-1 rounded-lg text-2xs font-semibold transition ${state.labelConfig.labelFormat === 'dual' ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600'}"
+                <!-- 標籤格式切換 -->
+                <div class="flex items-center space-x-1.5 pt-0.5">
+                  <button
+                    onclick="updateLabelConfig('labelFormat', 'dual')"
+                    class="flex-1 py-1 rounded-lg text-3xs font-semibold transition ${state.labelConfig.labelFormat === 'dual' ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600'}"
                   >
                     雙欄式 (每份+每100g)
                   </button>
-                  <button 
-                    onclick="updateLabelConfig('labelFormat', 'percent')" 
-                    class="flex-1 py-1 rounded-lg text-2xs font-semibold transition ${state.labelConfig.labelFormat === 'percent' ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600'}"
+                  <button
+                    onclick="updateLabelConfig('labelFormat', 'percent')"
+                    class="flex-1 py-1 rounded-lg text-3xs font-semibold transition ${state.labelConfig.labelFormat === 'percent' ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600'}"
                   >
                     參考值百分比 (%)
                   </button>
                 </div>
 
-                <!-- Voluntary checkboxes -->
-                <div class="flex items-center justify-between text-2xs text-slate-600 pt-1 border-t border-slate-200/60">
+                <!-- 自願標示項目勾選 -->
+                <div class="flex items-center justify-between text-3xs text-slate-600 pt-1 border-t border-slate-200/60">
                   <label class="flex items-center space-x-1 cursor-pointer">
                     <input type="checkbox" ${state.labelConfig.includeFiber ? 'checked' : ''} onchange="updateLabelConfig('includeFiber', this.checked)" class="accent-emerald-600 rounded-sm" />
                     <span>纖維</span>
@@ -9078,24 +9174,24 @@ function getPlateHtml() {
                     <span>鉀</span>
                   </label>
                   <button onclick="switchTab('label')" class="text-emerald-700 hover:underline font-semibold">
-                    進階獨立頁 ↗
+                    進階頁 ↗
                   </button>
                 </div>
               </div>
 
-              <!-- The Real-time Printable Label Sticker -->
+              <!-- 法規標籤貼紙本體 (即時連動渲染) -->
               <div id="sticker-wrapper">
                 ${
                   state.plateItems.length === 0
                     ? `
                   <div class="text-center py-8 text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    請先在左側加入水果搭配，即可即時在此產出商品法規標籤貼紙！
+                    請在左側或中間加入水果，立即產出商品法規標籤貼紙！
                   </div>
                 `
                     : (() => {
                         const { base100g, perServing } = getLabelNutrients();
                         return `
-                          <div class="label-product-name-display text-center font-bold text-xs text-slate-700 mb-2 bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                          <div class="label-product-name-display text-center font-bold text-xs text-slate-700 mb-1.5 bg-white py-1 px-2.5 rounded-xl border border-slate-200 shadow-2xs">
                             ${state.labelConfig.productName || '未命名商品'}
                           </div>
                           ${renderTFDALabelCardHtml(base100g, perServing, state.labelConfig)}
@@ -9105,11 +9201,11 @@ function getPlateHtml() {
               </div>
 
               <p class="text-3xs text-slate-400 text-center no-print">
-                💡 依左側水果公克數即時加權計算，修改水果時標籤同步更新。
+                💡 依配方公克數加權實時計算，修改即同步。
               </p>
             </div>
           `
-            : getPlateCostViewHtml()
+              : getPlateCostViewHtml()
           }
         </div>
       </div>
@@ -11755,9 +11851,143 @@ window.switchPlateRightTab = function (tab) {
   renderTabContent();
 };
 
-window.switchTab = function (tab) {
-  state.activeTab = tab;
-  render();
+// ==========================================
+// HTML5 拖曳配方與工作台核心事件處理
+// ==========================================
+window._draggedRowIndex = null;
+
+window.handleFruitDragStart = function (e, fruitId) {
+  try {
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'addFruit', fruitId: fruitId }));
+    e.dataTransfer.setData('text/plain', fruitId);
+    e.dataTransfer.effectAllowed = 'copy';
+  } catch (err) {}
+};
+
+window.handlePlateDragOver = function (e) {
+  e.preventDefault();
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'copy';
+  }
+  const dropZone = document.getElementById('plate-drop-zone');
+  if (dropZone) {
+    dropZone.classList.add('border-emerald-500', 'bg-emerald-50/40');
+  }
+};
+
+window.handlePlateDragLeave = function (e) {
+  const dropZone = document.getElementById('plate-drop-zone');
+  if (dropZone && !dropZone.contains(e.relatedTarget)) {
+    dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/40');
+  }
+};
+
+window.handlePlateDrop = function (e) {
+  e.preventDefault();
+  const dropZone = document.getElementById('plate-drop-zone');
+  if (dropZone) {
+    dropZone.classList.remove('border-emerald-500', 'bg-emerald-50/40');
+  }
+  let data;
+  try {
+    const raw = e.dataTransfer.getData('application/json');
+    if (raw) data = JSON.parse(raw);
+  } catch (err) {}
+
+  const fruitId = (data && data.fruitId) || (e.dataTransfer && e.dataTransfer.getData('text/plain'));
+  if (data && data.type === 'reorder') {
+    return;
+  }
+  if (fruitId) {
+    const fruit = getFruit(fruitId);
+    const grams = fruit?.serving_unit?.grams || 100;
+    window.addToPlate(fruitId, grams);
+  }
+};
+
+window.handleRowDragStart = function (e, index) {
+  window._draggedRowIndex = index;
+  try {
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'reorder', fromIndex: index }));
+    e.dataTransfer.effectAllowed = 'move';
+  } catch (err) {}
+  const row = document.getElementById(`plate-row-${index}`);
+  if (row) {
+    row.classList.add('opacity-40', 'scale-[0.99]');
+  }
+};
+
+window.handleRowDragOver = function (e, index) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move';
+  }
+  const row = document.getElementById(`plate-row-${index}`);
+  if (row && window._draggedRowIndex !== index) {
+    row.classList.add('border-emerald-500', 'bg-emerald-50/70', 'shadow-md');
+  }
+};
+
+window.handleRowDragLeave = function (e, index) {
+  const row = document.getElementById(`plate-row-${index}`);
+  if (row) {
+    row.classList.remove('border-emerald-500', 'bg-emerald-50/70', 'shadow-md');
+  }
+};
+
+window.handleRowDrop = function (e, targetIndex) {
+  e.preventDefault();
+  e.stopPropagation();
+  const targetRow = document.getElementById(`plate-row-${targetIndex}`);
+  if (targetRow) {
+    targetRow.classList.remove('border-emerald-500', 'bg-emerald-50/70', 'shadow-md');
+  }
+
+  let data;
+  try {
+    const raw = e.dataTransfer.getData('application/json');
+    if (raw) data = JSON.parse(raw);
+  } catch (err) {}
+
+  // 若從水果庫直接拖至指定列位插入
+  if (data && data.type === 'addFruit') {
+    const fruit = getFruit(data.fruitId);
+    const grams = fruit?.serving_unit?.grams || 100;
+    state.plateItems.splice(targetIndex, 0, { fruitId: data.fruitId, grams });
+    syncLabelWeightWithPlate();
+    render();
+    return;
+  }
+
+  // 排序重新排列
+  const fromIndex = data && typeof data.fromIndex === 'number' ? data.fromIndex : window._draggedRowIndex;
+  if (fromIndex !== null && fromIndex !== undefined && fromIndex !== targetIndex && state.plateItems[fromIndex]) {
+    const moved = state.plateItems.splice(fromIndex, 1)[0];
+    state.plateItems.splice(targetIndex, 0, moved);
+    render();
+  }
+  window._draggedRowIndex = null;
+  document.querySelectorAll('.plate-drag-row').forEach((el) => {
+    el.classList.remove('opacity-40', 'scale-[0.99]', 'border-emerald-500', 'bg-emerald-50/70', 'shadow-md');
+  });
+};
+
+window.handleRowDragEnd = function (e) {
+  window._draggedRowIndex = null;
+  document.querySelectorAll('.plate-drag-row').forEach((el) => {
+    el.classList.remove('opacity-40', 'scale-[0.99]', 'border-emerald-500', 'bg-emerald-50/70', 'shadow-md');
+  });
+};
+
+window.handlePaletteSearch = function (val) {
+  state.paletteSearchTerm = val;
+  renderTabContent();
+};
+
+window.setPaletteCategory = function (cat) {
+  state.paletteCategory = cat;
+  renderTabContent();
 };
 
 window.addToPlate = function (fruitId, grams) {
