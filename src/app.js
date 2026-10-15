@@ -2355,6 +2355,7 @@ const state = {
   editingRecipeId: null,
   paletteSearchTerm: '',
   paletteCategory: '全部',
+  plateMobileView: (savedState && savedState.plateMobileView) || 'recipe', // 'recipe' | 'palette' | 'label'
   searchTerm: '',
   selectedCategory: '全部',
   selectedTag: '全部',
@@ -8417,6 +8418,7 @@ function getPlateHtml() {
   const vitCPct = Math.min(250, Math.round((totals.vitamin_c / DRI.VITAMIN_C_MG) * 100));
   const fiberPct = Math.min(200, Math.round((totals.dietary_fiber / DRI.FRUIT_FIBER_GOAL_G) * 100));
   const sugarPct = Math.min(150, Math.round((totals.sugar / DRI.SUGAR_MAX_G) * 100));
+  const mobileView = state.plateMobileView || 'recipe';
 
   // 1. 水果庫資料彙整與即時篩選
   const allPaletteItems = [
@@ -8453,7 +8455,7 @@ function getPlateHtml() {
 
   // Left Column (Column 1): 水果與原料庫 Palette (高密度側邊欄)
   const paletteHtml = `
-    <div class="lg:col-span-3 xl:col-span-3 bg-white rounded-3xl p-3 sm:p-4 shadow-soft border border-slate-200/60 flex flex-col lg:sticky lg:top-20 max-h-[calc(100vh-100px)] no-print">
+    <div class="${mobileView === 'palette' ? 'flex' : 'hidden'} lg:flex lg:col-span-3 xl:col-span-3 bg-white rounded-3xl p-3 sm:p-4 shadow-soft border border-slate-200/60 flex-col lg:sticky lg:top-20 max-h-[72vh] sm:max-h-[78vh] lg:max-h-[calc(100vh-100px)] no-print">
       <!-- 標題與水果計數 -->
       <div class="flex items-center justify-between mb-2">
         <h3 class="font-bold text-slate-800 text-sm flex items-center space-x-1.5">
@@ -8481,8 +8483,8 @@ function getPlateHtml() {
         ` : ''}
       </div>
 
-      <!-- 分類標籤滑動條 -->
-      <div class="flex items-center space-x-1 overflow-x-auto pb-1.5 mb-2 scrollbar-none text-2xs">
+      <!-- 分類標籤快速切換 (自動換行，徹底避免滾動條遮擋) -->
+      <div class="flex flex-wrap gap-1 mb-2 text-2xs">
         ${paletteCategories.map(cat => `
           <button
             type="button"
@@ -8557,6 +8559,19 @@ function getPlateHtml() {
           `;
         }).join('')}
       </div>
+
+      <!-- 手機版返回配方按鈕 -->
+      <div class="lg:hidden mt-2 pt-2 border-t border-slate-100 flex items-center justify-between shrink-0">
+        <span class="text-xs font-semibold text-slate-600">已選 <strong class="text-emerald-700 font-bold">${state.plateItems.length}</strong> 款水果 (${totals.weight}g)</span>
+        <button
+          type="button"
+          onclick="setPlateMobileView('recipe')"
+          class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-95 flex items-center space-x-1"
+        >
+          <span>查看配方表</span>
+          <span>➔</span>
+        </button>
+      </div>
     </div>
   `;
 
@@ -8575,6 +8590,16 @@ function getPlateHtml() {
           </p>
         </div>
         <div class="pt-2 text-left max-w-md mx-auto">
+          <div class="pt-1 pb-2 lg:hidden">
+            <button
+              type="button"
+              onclick="setPlateMobileView('palette')"
+              class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-xs shadow-md transition flex items-center justify-center space-x-2 active:scale-95"
+            >
+              <span>🍉 點此前往挑選水果原料</span>
+              <span>➔</span>
+            </button>
+          </div>
           <span class="text-3xs font-bold text-slate-400 uppercase tracking-wider block mb-2.5 text-center">
             推薦健康水果搭配快速載入
           </span>
@@ -8812,13 +8837,63 @@ function getPlateHtml() {
   // 比例條調色盤
   const paletteBarColors = ['#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#8b5cf6', '#f97316', '#14b8a6', '#6366f1'];
 
-  return `
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-3.5 xl:gap-4 items-start">
-      <!-- 欄 1: 水果與原料庫 (Fruit Palette - 可拖曳 / 點擊加入) -->
-      ${paletteHtml}
+  const mobileSwitcherHtml = `
+    <!-- 手機與窄螢幕專用 3 頁籤切換器 (徹底解決螢幕過小欄位卡住與滑動衝突問題) -->
+    <div class="block lg:hidden mb-3 bg-white p-1 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-1 text-xs font-bold no-print">
+      <button
+        type="button"
+        onclick="setPlateMobileView('recipe')"
+        class="flex-1 py-2 px-1 rounded-xl transition flex items-center justify-center space-x-1 ${
+          mobileView === 'recipe'
+            ? 'bg-emerald-600 text-white shadow-xs'
+            : 'text-slate-600 hover:bg-slate-100'
+        }"
+      >
+        <span>🥗 今日配方</span>
+        <span class="text-3xs px-1.5 py-0.2 rounded-full ${mobileView === 'recipe' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'}">
+          ${state.plateItems.length}
+        </span>
+      </button>
+      <button
+        type="button"
+        onclick="setPlateMobileView('palette')"
+        class="flex-1 py-2 px-1 rounded-xl transition flex items-center justify-center space-x-1 ${
+          mobileView === 'palette'
+            ? 'bg-emerald-600 text-white shadow-xs'
+            : 'text-slate-600 hover:bg-slate-100'
+        }"
+      >
+        <span>🍉 水果原料庫</span>
+        <span class="text-3xs px-1.5 py-0.2 rounded-full ${mobileView === 'palette' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'}">
+          ${filteredPaletteItems.length}
+        </span>
+      </button>
+      <button
+        type="button"
+        onclick="setPlateMobileView('label')"
+        class="flex-1 py-2 px-1 rounded-xl transition flex items-center justify-center space-x-1 ${
+          mobileView === 'label'
+            ? 'bg-emerald-600 text-white shadow-xs'
+            : 'text-slate-600 hover:bg-slate-100'
+        }"
+      >
+        <span>🏷️ 即時標籤</span>
+        <span class="text-3xs px-1.5 py-0.2 rounded-md ${mobileView === 'label' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800 font-semibold'}">
+          ${totals.calories}k
+        </span>
+      </button>
+    </div>
+  `;
 
-      <!-- 欄 2: 緊湊拖曳配方表 (Draggable Recipe Table & Drop Zone) -->
-      <div class="lg:col-span-5 xl:col-span-5 space-y-3 no-print">
+  return `
+    <div>
+      ${mobileSwitcherHtml}
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3.5 xl:gap-4 items-start">
+        <!-- 欄 1: 水果與原料庫 (Fruit Palette - 可拖曳 / 點擊加入) -->
+        ${paletteHtml}
+
+        <!-- 欄 2: 緊湊拖曳配方表 (Draggable Recipe Table & Drop Zone) -->
+        <div class="${mobileView === 'recipe' ? 'block' : 'hidden'} lg:block lg:col-span-5 xl:col-span-5 space-y-3 no-print">
         <!-- 頂部操作列 -->
         <div class="bg-white rounded-2xl p-3 sm:p-4 shadow-soft border border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
@@ -8836,6 +8911,14 @@ function getPlateHtml() {
             </p>
           </div>
           <div class="flex items-center space-x-1.5 flex-wrap">
+            <button
+              type="button"
+              onclick="setPlateMobileView('palette')"
+              class="lg:hidden px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition flex items-center space-x-1 shadow-2xs"
+              title="展開水果原料庫選擇新水果"
+            >
+              <span>＋ 加水果</span>
+            </button>
             <button onclick="saveCurrentRecipePrompt()" ${state.plateItems.length === 0 ? 'disabled' : ''} class="px-2.5 py-1 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center space-x-1 disabled:opacity-40 disabled:pointer-events-none shadow-2xs" title="儲存當前搭配至記憶清單">
               <span>💾 儲存</span>
             </button>
@@ -8901,7 +8984,7 @@ function getPlateHtml() {
       </div>
 
       <!-- 欄 3: 即時標籤與健康儀表板 (Live Label & Health Gauges) -->
-      <div class="lg:col-span-4 xl:col-span-4 lg:sticky lg:top-20 max-h-[calc(100vh-100px)] overflow-y-auto pr-1" id="print-area">
+      <div class="${mobileView === 'label' ? 'block' : 'hidden'} lg:block lg:col-span-4 xl:col-span-4 lg:sticky lg:top-20 max-h-[85vh] lg:max-h-[calc(100vh-100px)] overflow-y-auto pr-1" id="print-area">
         <div class="bg-white rounded-3xl p-4 sm:p-5 shadow-soft border border-slate-200/60 space-y-4">
           <!-- 頁籤切換器 (健康攝取 vs 法規標籤 vs 原料成本) -->
           <div class="flex items-center p-1 bg-slate-100/90 rounded-2xl text-xs font-bold no-print border border-slate-200/50">
@@ -9218,6 +9301,7 @@ function getPlateHtml() {
           }
         </div>
       </div>
+    </div>
     </div>
   `;
 }
@@ -12006,6 +12090,14 @@ window.setPaletteCategory = function (cat) {
   state.paletteCategory = cat;
   renderTabContent();
 };
+
+window.setPlateMobileView = function (view) {
+  state.plateMobileView = view;
+  renderTabContent();
+};
+function setPlateMobileView(view) {
+  window.setPlateMobileView(view);
+}
 
 window.addToPlate = function (fruitId, grams) {
   const existing = state.plateItems.find((item) => item.fruitId === fruitId);
