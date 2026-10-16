@@ -7917,9 +7917,9 @@ function renderCostLiveCalculatorHtml() {
         <!-- 拼盤內容明細 + 定價模擬器 雙欄配置 -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <!-- 左側：搭配各項原料成本清單 -->
-          <div class="lg:col-span-7 space-y-4">
+          <div class="lg:col-span-8 space-y-4">
             <div class="overflow-x-auto border border-slate-200/80 rounded-2xl">
-              <table class="w-full text-left text-xs border-collapse min-w-[780px]">
+              <table class="w-full text-left text-xs border-collapse min-w-[600px]">
                 <thead>
                   <tr class="bg-slate-100/90 text-slate-600 text-2xs border-b border-slate-200">
                     <th class="py-2.5 px-3 font-bold">水果品項</th>
@@ -8010,7 +8010,7 @@ function renderCostLiveCalculatorHtml() {
           </div>
 
           <!-- 右側：盒裝商業定價與利潤試算機 -->
-          <div class="lg:col-span-5 bg-slate-50/80 rounded-2xl p-5 border border-slate-200/80 space-y-4">
+          <div class="lg:col-span-4 bg-slate-50/80 rounded-2xl p-5 border border-slate-200/80 space-y-4">
             <div class="flex items-center justify-between">
               <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
                 <span>🏷️ 盒裝定價與毛利模擬</span>
