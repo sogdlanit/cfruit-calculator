@@ -6898,7 +6898,8 @@ function getSeasonalityPageHtml() {
               type="text"
               placeholder="搜尋水果中文或產地..."
               value="${state.seasonSearchTerm || ''}"
-              oninput="handleSeasonSearch(this.value)"
+              oninput="if (!event.isComposing) handleSeasonSearch(this.value)"
+              oncompositionend="handleSeasonSearch(this.value)"
               class="px-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 w-44 transition"
             />
             <div id="season-category-bar" class="flex items-center space-x-1 overflow-x-auto text-2xs">
@@ -7265,7 +7266,8 @@ function getCostDatabasePageHtml() {
                 id="cost-search-input"
                 placeholder="搜尋水果中文、英文或分類..."
                 value="${state.costSearchTerm || ''}"
-                oninput="handleCostSearch(this.value)"
+                oninput="if (!event.isComposing) handleCostSearch(this.value)"
+                oncompositionend="handleCostSearch(this.value)"
                 class="w-full pl-3 pr-3 py-1.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500 transition"
               />
             </div>
@@ -8486,7 +8488,8 @@ function getPlateHtml() {
           type="text"
           placeholder="搜尋水果、維C、低GI..."
           value="${state.paletteSearchTerm || ''}"
-          oninput="handlePaletteSearch(this.value)"
+          oninput="if (!event.isComposing) handlePaletteSearch(this.value)"
+          oncompositionend="handlePaletteSearch(this.value)"
           class="w-full pl-7 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden transition placeholder:text-slate-400 font-medium"
         />
         <span class="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
@@ -9198,7 +9201,8 @@ function getPlateHtml() {
                   <input
                     type="text"
                     value="${state.labelConfig.productName}"
-                    oninput="handleProductNameInput(this.value)"
+                    oninput="if (!event.isComposing) handleProductNameInput(this.value)"
+                    oncompositionend="handleProductNameInput(this.value)"
                     class="product-name-input-class w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                     placeholder="如：綜合鮮切水果盒"
                   />
@@ -10356,7 +10360,8 @@ function getLabelGeneratorHtml() {
                 <input
                   type="text"
                   value="${cfg.productName}"
-                  oninput="handleProductNameInput(this.value)"
+                  oninput="if (!event.isComposing) handleProductNameInput(this.value)"
+                  oncompositionend="handleProductNameInput(this.value)"
                   class="product-name-input-class w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                   placeholder="如：綜合鮮切水果盒"
                 />
@@ -10944,7 +10949,8 @@ function getCatalogHtml() {
                 id="catalog-search-input"
                 placeholder="搜尋水果中文、英文或標籤 (如：芭樂、維生素C)..."
                 value="${state.searchTerm}"
-                oninput="handleSearch(this.value)"
+                oninput="if (!event.isComposing) handleSearch(this.value)"
+                oncompositionend="handleSearch(this.value)"
                 class="w-full pl-4 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/80 focus:bg-white text-sm rounded-2xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 transition"
               />
             </div>
@@ -11278,7 +11284,8 @@ function renderModal() {
               <input
                 type="text"
                 value="${state.recipeSearchQuery || ''}"
-                oninput="setRecipeSearchQuery(this.value)"
+                oninput="if (!event.isComposing) setRecipeSearchQuery(this.value)"
+                oncompositionend="setRecipeSearchQuery(this.value)"
                 placeholder="🔍 快速搜尋配方名稱、規格或原料（如：酪梨、鳳梨、超草莓、R&D）..."
                 class="w-full pl-3.5 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               />
