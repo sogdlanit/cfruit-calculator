@@ -766,6 +766,46 @@
     "tfda_sample_name": "藍莓(台灣)"
   },
   {
+    "id": "blueberry_wild_frozen_ca",
+    "name": "冷凍加拿大藍莓",
+    "english_name": "Canadian Wild Blueberry (Frozen)",
+    "category": "漿果類",
+    "emoji": "🫐",
+    "themeColor": "indigo",
+    "serving_unit": {
+      "name": "碗",
+      "grams": 100
+    },
+    "gi_level": "low",
+    "gi_value": 53,
+    "tags": [
+      "IQF急速冷凍",
+      "高纖維",
+      "野生小果",
+      "全年供貨"
+    ],
+    "description": "加拿大魁北克、新斯科細亞一帶的野生矮叢藍莓 (lowbush)，果粒小、色深、皮肉比高，採收後 IQF 急速冷凍。膳食纖維約為一般鮮藍莓的 2 倍，全年穩定供貨，適合果昔、烘焙與常態拼盤。營養數值採美國農業部 USDA FoodData Central「Blueberries, wild, frozen」(FDC 173949)；TFDA 資料庫目前無冷凍藍莓樣品。",
+    "nutrition_per_100g": {
+      "calories": 57.0,
+      "water": 85.8,
+      "protein": 0.0,
+      "fat": 0.2,
+      "carbohydrates": 13.8,
+      "sugar": 7.0,
+      "dietary_fiber": 4.4,
+      "vitamin_c": 1.7,
+      "potassium": 68.0,
+      "magnesium": 7.0,
+      "calcium": 17.0,
+      "sodium": 3.0,
+      "saturated_fat": 0.0,
+      "trans_fat": 0.0
+    },
+    "tfda_url": "https://fdc.nal.usda.gov/food-details/173949/nutrients",
+    "tfda_sample_name": "USDA FDC 173949 Blueberries, wild, frozen",
+    "source_label": "USDA營養成分資料庫"
+  },
+  {
     "id": "avocado",
     "name": "酪梨 (牛油果)",
     "english_name": "Avocado",

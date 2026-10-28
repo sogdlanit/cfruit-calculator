@@ -2877,6 +2877,10 @@ const DEFAULT_FRUIT_COST_MAP = {
     fresh: { purchasePrice: 450, yieldRate: 95, note: '空運生鮮藍莓' },
     frozen: { purchasePrice: 260, yieldRate: 98, note: '進口IQF野生冷凍藍莓' },
   },
+  blueberry_wild_frozen_ca: {
+    fresh: { purchasePrice: 260, yieldRate: 98, note: '本品僅有冷凍規格，數值同冷凍' },
+    frozen: { purchasePrice: 260, yieldRate: 98, note: '加拿大IQF野生冷凍藍莓，解凍滴水損耗約2%' },
+  },
   avocado: {
     fresh: { purchasePrice: 130, yieldRate: 65, note: '去硬皮去大圓核' },
     frozen: { purchasePrice: 180, yieldRate: 95, note: 'IQF冷凍酪梨丁塊' },
@@ -6462,6 +6466,14 @@ const FRUIT_SEASONALITY_MAP = {
     regions: '美西華盛頓、奧勒岡、智利 (進口)',
     flavorNotes: '藍紫色花青素之王，微酸微甜，表皮天然白霜完整。',
     peakStrategyReason: '新鮮空運藍莓每公斤常高達 $450；商業烘焙或常態拼盤改用 IQF 冷凍藍莓 ($260/kg) 可省 42% 成本。'
+  },
+  blueberry_wild_frozen_ca: {
+    peakMonths: [],
+    normalMonths: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    offMonths: [],
+    regions: '加拿大魁北克、新斯科細亞 (進口冷凍)',
+    flavorNotes: '野生矮叢小果，酸甜濃縮、花青素色澤深，解凍後汁液豐富。',
+    peakStrategyReason: '8~9月採收後即 IQF 冷凍，全年庫存穩定、價格波動小，適合作為藍莓常態備料。'
   },
   avocado: {
     peakMonths: [7, 8, 9, 10],
@@ -11463,9 +11475,9 @@ function renderModal() {
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 rounded-xl shadow-2xs transition hover:scale-102 active:scale-98 group"
-                  title="前往衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」食品營養成分資料庫頁面"
+                  title="${fruit.source_label ? `前往${fruit.source_label}「${fruit.tfda_sample_name || fruit.name}」頁面` : `前往衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」食品營養成分資料庫頁面`}"
                 >
-                  <span>🏛️ FDA營養成分資料庫</span>
+                  <span>🏛️ ${fruit.source_label || 'FDA營養成分資料庫'}</span>
                   <span class="text-3xs text-emerald-600 group-hover:translate-x-0.5 transition-transform font-bold">↗</span>
                 </a>
               </div>
@@ -11550,9 +11562,9 @@ function renderModal() {
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-2xs text-emerald-700 hover:text-emerald-900 hover:underline flex items-center space-x-1 font-medium bg-emerald-50/80 px-2 py-1 rounded-lg border border-emerald-200/60 transition"
-                title="衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」食品營養成分資料庫頁面"
+                title="${fruit.source_label ? `${fruit.source_label}「${fruit.tfda_sample_name || fruit.name}」頁面` : `衛生福利部食品藥物管理署 (TFDA) 官方「${fruit.name}」食品營養成分資料庫頁面`}"
               >
-                <span>🔍 衛福部 TFDA 營養成分資料庫對照 ↗</span>
+                <span>🔍 ${fruit.source_label ? `${fruit.source_label}對照` : '衛福部 TFDA 營養成分資料庫對照'} ↗</span>
               </a>
             </div>
             <div class="overflow-hidden border border-slate-200 rounded-2xl">
