@@ -8673,7 +8673,9 @@ function getPlateHtml() {
               ondragend="handleRowDragEnd(event)"
             >
               <!-- 主列控制列 (一眼全部看得到的高密度設計) -->
-              <div class="flex items-center justify-between gap-1.5 sm:gap-2">
+              <div class="flex flex-wrap items-center justify-between gap-x-1.5 sm:gap-x-2 gap-y-1.5">
+                <!-- 左群組：握把 + 名稱 + 常溫/冷凍（空間不足時右群組會整組換行，不再溢出卡片） -->
+                <div class="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <!-- 拖曳排序握把 -->
                 <span
                   class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 px-1 py-0.5 text-base select-none shrink-0"
@@ -8684,12 +8686,12 @@ function getPlateHtml() {
 
                 <!-- 水果 Emoji 與名稱 (點擊看圖鑑) -->
                 <div
-                  class="flex items-center space-x-1.5 shrink-0 cursor-pointer min-w-0"
+                  class="flex items-center space-x-1.5 cursor-pointer min-w-0"
                   onclick="openDetailModal('${fruit.id}')"
                   title="查看 ${fruit.name} 完整營養資訊"
                 >
                   <span class="text-xl shrink-0 group-hover:scale-105 transition-transform">${fruit.emoji}</span>
-                  <span class="font-bold text-xs sm:text-sm text-slate-800 hover:text-emerald-600 transition truncate max-w-[70px] sm:max-w-[105px]">
+                  <span class="font-bold text-xs sm:text-sm text-slate-800 hover:text-emerald-600 transition truncate min-w-0 max-w-[70px] sm:max-w-[105px]">
                     ${fruit.name}
                   </span>
                 </div>
@@ -8707,13 +8709,17 @@ function getPlateHtml() {
                 >
                   <span>${isFrozen ? '❄️冷凍' : '🌱常溫'}</span>
                 </button>
+                </div>
+
+                <!-- 右群組：重量控制 + 熱量 + 移除 -->
+                <div class="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
 
                 <!-- 重量控制區：-10 / 滑桿 / +10 / 輸入框 -->
-                <div class="flex items-center space-x-1 shrink-0 ml-auto">
+                <div class="flex items-center gap-1">
                   <button
                     type="button"
                     onclick="adjustGrams(${idx}, -10)"
-                    class="w-6 h-6 flex items-center justify-center text-3xs font-bold text-slate-600 bg-white hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200 transition select-none shadow-2xs"
+                    class="w-6 h-6 shrink-0 flex items-center justify-center text-3xs font-bold text-slate-600 bg-white hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200 transition select-none shadow-2xs"
                     title="減少 10g"
                   >
                     -10
@@ -8727,20 +8733,20 @@ function getPlateHtml() {
                     step="1"
                     value="${item.grams}"
                     oninput="updateGrams(${idx}, Number(this.value))"
-                    class="w-14 sm:w-20 md:w-24 accent-emerald-600 cursor-pointer"
+                    class="w-14 sm:w-20 md:w-24 shrink-0 accent-emerald-600 cursor-pointer"
                     title="滑動微調重量"
                   />
 
                   <button
                     type="button"
                     onclick="adjustGrams(${idx}, 10)"
-                    class="w-6 h-6 flex items-center justify-center text-3xs font-bold text-slate-600 bg-white hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200 transition select-none shadow-2xs"
+                    class="w-6 h-6 shrink-0 flex items-center justify-center text-3xs font-bold text-slate-600 bg-white hover:bg-emerald-100 hover:text-emerald-800 active:scale-95 rounded-lg border border-slate-200 transition select-none shadow-2xs"
                     title="增加 10g"
                   >
                     +10
                   </button>
 
-                  <div class="flex items-center space-x-0.5">
+                  <div class="flex items-center space-x-0.5 shrink-0">
                     <input
                       id="plate-num-${idx}"
                       type="number"
@@ -8755,7 +8761,7 @@ function getPlateHtml() {
                 </div>
 
                 <!-- 本項熱量標籤 -->
-                <div class="text-right text-3xs font-semibold text-slate-500 shrink-0 hidden md:block min-w-[46px]">
+                <div class="text-right text-3xs font-semibold text-slate-500 shrink-0 hidden md:block whitespace-nowrap">
                   <span class="text-emerald-700 font-bold">${nut.calories}</span>k
                 </div>
 
@@ -8767,6 +8773,7 @@ function getPlateHtml() {
                 >
                   🗑️
                 </button>
+                </div>
               </div>
 
               <!-- 緊湊附屬列：常用份量快選 + 關鍵營養 + 原料成本 -->
